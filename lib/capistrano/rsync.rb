@@ -27,14 +27,16 @@ Rake::Task["deploy:updating"].enhance ["rsync:hook_scm"]
 desc "Stage and rsync to the server (or its cache)."
 task :rsync => %w[rsync:stage] do
   roles(:all).each do |role|
-    user = role.user + "@" if !role.user.nil?
+    run_locally do
+      user = role.user + "@" if !role.user.nil?
 
-    rsync = %w[rsync]
-    rsync.concat fetch(:rsync_options, %w(--recursive --delete --delete-excluded --exclude .git*))
-    rsync << fetch(:rsync_stage) + "/"
-    rsync << "#{user}#{role.hostname}:#{rsync_cache.call || release_path}"
+      rsync = %w[rsync]
+      rsync.concat fetch(:rsync_options, %w[--recursive --delete --delete-excluded --exclude .git*])
+      rsync << fetch(:rsync_stage) + "/"
+      rsync << "#{user}#{role.hostname}:#{rsync_cache.call || release_path}"
 
-    Kernel.system *rsync
+      execute(*rsync)
+    end
   end
 end
 
@@ -54,22 +56,25 @@ namespace :rsync do
   end
 
   task :create_stage do
-    next if File.directory?(fetch(:rsync_stage))
-
-    clone = %W[git clone]
-    clone << fetch(:repo_url, ".")
-    clone << fetch(:rsync_stage)
-    Kernel.system *clone
+    run_locally do
+      unless File.directory?(fetch(:rsync_stage))
+        clone = %W[git clone]
+        clone << "--recursive" if fetch(:git_clone_with_submodule)
+        clone << "--depth #{fetch(:git_clone_depth)}" if fetch(:git_clone_depth)
+        clone << fetch(:repo_url, ".")
+        clone << fetch(:rsync_stage)
+        execute(*clone)
+      end
+    end
   end
 
   desc "Stage the repository in a local directory."
   task :stage => %w[create_stage] do
-    Dir.chdir fetch(:rsync_stage) do
-      update = %W[git fetch --quiet --all --prune]
-      Kernel.system *update
-
-      checkout = %W[git reset --hard origin/#{fetch(:branch)}]
-      Kernel.system *checkout
+    run_locally do
+      within fetch(:rsync_stage) do
+        execute(:git, "fetch", "--quiet", "--all", "--prune")
+        execute(:git, "reset", "--hard", "origin/#{fetch(:branch)}")
+      end
     end
   end
 
