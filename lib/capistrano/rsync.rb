@@ -73,6 +73,8 @@ namespace :rsync do
     run_locally do
       within fetch(:rsync_stage) do
         execute(:git, "fetch", "--quiet", "--all", "--prune")
+        execute(:git, "submodule", "init") if fetch(:git_clone_with_submodule)
+        execute(:git, "submodule", "update") if fetch(:git_clone_with_submodule)
         execute(:git, "reset", "--hard", "origin/#{fetch(:branch)}")
       end
     end
